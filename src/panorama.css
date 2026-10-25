@@ -1,0 +1,486 @@
+.pano-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #101d32b8;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.pano-viewer,
+.pano-studio {
+  background: #fff;
+  border-radius: 20px;
+  width: min(1300px, 100%);
+  max-height: 95dvh;
+  overflow: auto;
+  color: #192b43;
+  box-shadow: 0 24px 80px #0005;
+}
+.pano-studio {
+  width: min(700px, 100%);
+}
+.pano-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #e4e9ef;
+  gap: 16px;
+}
+.pano-header h2 {
+  margin: 0;
+  font-size: 22px;
+}
+.pano-header button,
+.pano-controls button {
+  border: 0;
+  border-radius: 8px;
+  padding: 9px;
+  cursor: pointer;
+}
+.pano-eyebrow,
+.pano-help,
+.pano-empty {
+  font-size: 13px;
+  line-height: 1.65;
+  color: #637287;
+}
+.pano-viewer-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+.pano-stage {
+  position: relative;
+  min-height: 530px;
+  background: #142034;
+}
+.pano-stage > .pano-canvas {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+}
+.pano-canvas-hidden {
+  display: none;
+}
+.pano-sidebar {
+  padding: 22px;
+  max-height: 75dvh;
+  overflow: auto;
+}
+.pano-location {
+  display: flex;
+  gap: 8px;
+}
+.pano-controls,
+.pano-coverage {
+  position: absolute;
+  left: 16px;
+  background: #132238df;
+  color: white;
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+}
+.pano-controls {
+  bottom: 16px;
+}
+.pano-coverage {
+  top: 16px;
+  flex-direction: column;
+  align-items: flex-start;
+  pointer-events: none;
+}
+.pano-crosshair,
+.pano-loading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  pointer-events: none;
+}
+.pano-loading {
+  display: grid;
+  gap: 12px;
+  text-align: center;
+}
+.pano-fallback img {
+  width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+}
+.pano-fallback div {
+  padding: 20px;
+  color: white;
+}
+.pano-hotspot-list {
+  padding: 0;
+  list-style: none;
+}
+.pano-hotspot-list li {
+  display: flex;
+  margin: 8px 0;
+  gap: 6px;
+}
+.pano-hotspot-list button {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid #dce3ed;
+  border-radius: 9px;
+  background: #f5f7fa;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+.pano-hotspot-list button:first-child {
+  flex: 1;
+}
+.pano-sphere-hotspot {
+  border: 2px solid white;
+  border-radius: 20px;
+  background: #125ed5;
+  color: white;
+  padding: 8px 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pano-hotspot-anchor {
+  width: 0;
+  height: 0;
+}
+.pano-editor {
+  border-top: 1px solid #dce3ed;
+  margin-top: 20px;
+  padding-top: 10px;
+}
+.pano-sidebar h3 {
+  font-size: 15px;
+}
+.pano-editor label,
+.pano-studio label {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  margin: 14px 0;
+}
+.pano-editor input,
+.pano-editor select,
+.pano-studio input,
+.pano-studio select {
+  min-width: 0;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #cdd6e3;
+  border-radius: 8px;
+  background: white;
+  color: #192b43;
+}
+.pano-button {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  padding: 11px 15px;
+  border: 1px solid #dce3ed;
+  border-radius: 9px;
+  background: white;
+  cursor: pointer;
+}
+.pano-primary {
+  background: #1769e0;
+  color: white;
+  border-color: #1769e0;
+}
+.pano-button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.pano-error {
+  color: #b32727;
+}
+.pano-success {
+  color: #15804e;
+}
+.pano-studio-content {
+  padding: 24px;
+}
+.pano-quality {
+  border: 1px solid #d9e5e2;
+  border-radius: 12px;
+  background: #f5faf8;
+  padding: 12px 14px;
+  color: #23473e;
+}
+.pano-quality > strong {
+  display: block;
+  font-size: 13px;
+}
+.pano-quality > p {
+  margin: 5px 0 9px;
+  color: #71827e;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.pano-quality ul {
+  display: grid;
+  gap: 7px;
+  max-height: 150px;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pano-quality li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.pano-quality li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pano-quality li small {
+  color: #628176;
+  text-align: right;
+}
+.pano-quality li.warn small {
+  color: #a8611a;
+}
+.pano-preview {
+  width: 100%;
+  margin-top: 20px;
+  border-radius: 12px;
+}
+.pano-gallery {
+  display: grid;
+  gap: 14px;
+}
+.pano-card {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #dce3ed;
+  border-radius: 12px;
+  background: white;
+  text-align: left;
+  cursor: pointer;
+}
+.pano-card img {
+  width: 100%;
+  border-radius: 8px;
+}
+.pano-minimap {
+  width: 100%;
+  background: #f2f5f9;
+  border: 1px solid #dce3ed;
+  border-radius: 10px;
+  margin-top: 14px;
+}
+.pano-place-detail {
+  padding: 12px;
+  background: #eef5ff;
+  border-radius: 10px;
+}
+.pano-angle-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+/* Panorama tools use the same controls, surfaces and TTK accent as the map. */
+.pano-backdrop { background: #202629b8; }
+.pano-viewer,
+.pano-studio {
+  border: 1px solid #e6e3dd;
+  border-radius: 18px;
+  color: #24282b;
+  box-shadow: 0 24px 80px #171a1c38;
+}
+.pano-header { border-color: #e8e6e2; }
+.pano-header h2,
+.pano-sidebar h3 { color: #24282b; letter-spacing: -.35px; }
+.pano-header button,
+.pano-controls button,
+.pano-button,
+.pano-hotspot-list button {
+  min-height: 40px;
+  border: 1px solid #e2e0dc;
+  border-radius: 10px;
+  color: #35444c;
+  background: #fff;
+}
+.pano-header button:hover,
+.pano-controls button:hover,
+.pano-button:hover:not(:disabled),
+.pano-hotspot-list button:hover { background: #f6f5f2; border-color: #cfcac2; }
+.pano-primary,
+.pano-primary:hover:not(:disabled) {
+  color: #fff;
+  background: #e52713;
+  border-color: #e52713;
+}
+.pano-primary:hover:not(:disabled) { background: #c91f10; border-color: #c91f10; }
+.pano-button:focus-visible,
+.pano-header button:focus-visible,
+.pano-controls button:focus-visible,
+.pano-hotspot-list button:focus-visible,
+.pano-studio input:focus-visible,
+.pano-studio select:focus-visible,
+.pano-editor input:focus-visible,
+.pano-editor select:focus-visible {
+  outline: 3px solid #e527134d;
+  outline-offset: 2px;
+}
+.pano-studio input,
+.pano-studio select,
+.pano-editor input,
+.pano-editor select {
+  border-color: #d8d6d0;
+  border-radius: 9px;
+  color: #24282b;
+}
+.pano-studio input[type='file'] {
+  min-height: 48px;
+  padding: 7px;
+  border-style: dashed;
+  background: #faf9f7;
+  color: #59656b;
+}
+.pano-studio input[type='file']::file-selector-button {
+  min-height: 32px;
+  margin-right: 10px;
+  padding: 6px 11px;
+  border: 1px solid #e2e0dc;
+  border-radius: 8px;
+  background: #fff;
+  color: #35444c;
+  font: inherit;
+  cursor: pointer;
+}
+.pano-file-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px dashed #d8d6d0;
+  border-radius: 10px;
+  background: #faf9f7;
+  color: #59656b;
+  cursor: pointer;
+}
+.pano-file-picker-button {
+  flex: none;
+  padding: 7px 11px;
+  border: 1px solid #e2e0dc;
+  border-radius: 8px;
+  background: #fff;
+  color: #35444c;
+  font-size: 12px;
+  font-weight: 600;
+}
+.pano-file-picker-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: #71807d;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pano-file-picker input[type='file'] {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  opacity: 0;
+  cursor: pointer;
+}
+.pano-file-picker:focus-within {
+  outline: 3px solid #e527134d;
+  outline-offset: 2px;
+}
+.pano-file-picker:has(input:disabled) {
+  cursor: wait;
+  opacity: .65;
+}
+.pano-studio input:focus,
+.pano-studio select:focus,
+.pano-editor input:focus,
+.pano-editor select:focus { border-color: #e52713; }
+.pano-quality { border-color: #d8e5dd; background: #f4f8f5; }
+.pano-place-detail { background: #f5f4f1; }
+.pano-sphere-hotspot { background: #e52713; }
+.pano-node-empty{margin:14px 18px 0;padding:14px;border:1px solid #e9d7b9;border-radius:11px;background:#fff9ee;color:#4c4030;display:grid;gap:8px}.pano-node-empty strong{font-size:13px}.pano-node-empty p{margin:0;color:#6d6254;font-size:12px;line-height:1.55}.pano-node-empty .pano-button{justify-self:start;min-height:38px}
+@media (max-width: 700px) {
+  .pano-viewer-body { display: flex; flex-direction: column; }
+  .pano-stage { flex: none; height: min(54dvh, 460px); min-height: 320px; }
+  .pano-sidebar { max-height: none; overflow: visible; padding: 18px 16px 28px; }
+  .pano-studio-content { padding: 18px 16px; }
+  .pano-header { padding: 15px 16px; }
+  .pano-header h2 { font-size: 18px; }
+  .pano-angle-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pano-viewer *, .pano-studio * { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
+@media (max-width: 700px) {
+  .pano-backdrop-studio {
+    align-items: center;
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+  .pano-backdrop-studio .pano-studio {
+    height: auto;
+    max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    border-radius: 16px;
+  }
+}
+@media (max-width: 700px) {
+  .pano-backdrop {
+    padding: 0;
+  }
+  .pano-viewer,
+  .pano-studio {
+    border-radius: 0;
+    max-height: 100dvh;
+    height: 100dvh;
+  }
+  .pano-viewer-body {
+    display: flex;
+    flex-direction: column;
+  }
+  .pano-stage {
+    flex: none;
+    height: min(54dvh, 460px);
+    min-height: 320px;
+  }
+  .pano-sidebar {
+    max-height: none;
+  }
+  .pano-header {
+    padding: 15px;
+  }
+  .pano-header h2 {
+    font-size: 18px;
+  }
+  .pano-angle-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pano-controls span {
+    display: none;
+  }
+}

@@ -1,0 +1,49 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPACE_DB_PATH: /data/space.db
+      SPACE_ALLOWED_ORIGINS: https://${SPACE_DOMAIN},http://${SERVER_IP}
+    volumes:
+      - ./data:/data
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    read_only: true
+    pids_limit: 256
+    mem_limit: 3g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    pids_limit: 128
+    mem_limit: 256m
+
+volumes:
+  caddy_data:
+  caddy_config:

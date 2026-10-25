@@ -1,0 +1,21 @@
+{
+  "id": "/map/demo",
+  "name": "Карта пространства · ТТК",
+  "short_name": "Карта ТТК",
+  "description": "Интерактивная навигация внутри здания и карта пространства.",
+  "lang": "ru",
+  "dir": "ltr",
+  "start_url": "/map/demo?source=installed-app",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#f6f7f8",
+  "theme_color": "#f5f6f8",
+  "categories": ["navigation", "travel", "utilities"],
+  "icons": [
+    { "src": "/icons/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,48 @@
+/* Phone layouts are shared by the website, installed web app and native web views. */
+@media (max-width: 760px) {
+  .app-shell .main-header { padding-top: env(safe-area-inset-top); height: auto; min-height: 64px; gap: 8px; }
+  .app-shell .brand { min-width: 0; flex: 1; gap: 10px; }
+  .app-shell .brand-context { min-width: 0; }
+  .app-shell .brand-context strong { font-size: 12px; }
+  .app-shell .brand-second { font-size: 7px; letter-spacing: .4px; }
+  .app-shell .ttk-logo { width: 64px; flex-shrink: 0; }
+  .app-shell .organizer-button { min-height: 44px; padding-inline: 9px; }
+  .app-shell main { padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+  .app-shell .offline-download { align-items: center; justify-content: space-between; gap: 8px; }
+  .app-shell .offline-download > button { min-height: 44px; }
+  .app-shell input:not([type='checkbox']):not([type='radio']),
+  .app-shell select, .app-shell textarea { font-size: 16px; }
+  .app-shell input:not([type='checkbox']):not([type='radio']), .app-shell select { min-height: 44px; }
+  .app-shell .sidebar-tabs button, .app-shell .filter-chips button,
+  .app-shell .map-controls button, .app-shell .map-view-switch button,
+  .app-shell .floor-switch button, .app-shell .map-expand-button,
+  .app-shell .map-details-button { min-height: 44px; }
+  .app-shell .map-topbar { flex-wrap: wrap; align-items: flex-start; }
+  .app-shell .floor-switch { max-width: 100%; overflow-x: auto; flex-shrink: 1; }
+  .app-shell .floor-switch button { flex-shrink: 0; }
+  .app-shell .map-topbar-tools { margin-left: auto; }
+  .app-shell .map-footnote { gap: 6px; padding-inline: 8px; font-size: 9px; }
+  .app-shell .editor-banner { flex-wrap: wrap; gap: 10px; }
+  .app-shell .editor-banner > span { flex-wrap: wrap; }
+  .app-shell .editor-banner button { min-height: 44px; padding: 8px; }
+  .app-shell .modal-backdrop { padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); }
+  .app-shell .modal { max-height: calc(100dvh - 32px); padding: 28px 20px; overflow-wrap: anywhere; }
+  .app-shell .modal-close { min-height: 44px; min-width: 44px; top: 4px; right: 4px; }
+  .app-shell .modal h2 { padding-right: 18px; font-size: 22px; }
+  .app-shell .modal p { font-size: 13px; }
+  .app-shell .install-modal .primary-button { min-height: 44px; }
+  .app-shell .pano-header { position: sticky; top: 0; z-index: 5; background: white; padding-top: max(12px, env(safe-area-inset-top)); }
+  .app-shell .pano-header button { min-width: 44px; min-height: 44px; flex-shrink: 0; }
+  .app-shell .pano-controls { max-width: calc(100% - 24px); flex-wrap: wrap; gap: 5px; left: 12px; }
+  .app-shell .pano-controls button { min-width: 44px; min-height: 44px; }
+  .app-shell .pano-studio-content, .app-shell .pano-sidebar { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+  .app-shell .pano-studio input[type='file'] { font-size: 13px; max-width: 100%; }
+  .app-shell .pano-angle-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-shell .pano-quality { overflow-wrap: anywhere; }
+}
+@media (max-width: 380px) {
+  .app-shell .brand-second { display: none; }
+  .app-shell .main-header { padding-inline: 10px; }
+  .app-shell .map-topbar { gap: 4px; }
+  .app-shell .map-view-switch button { padding-inline: 6px; }
+}

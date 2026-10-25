@@ -1,0 +1,82 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* SpaceMapLiDARApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* SpaceMapLiDARApp.swift */; };
+		A10000000000000000000002 /* RoomPlanScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* RoomPlanScannerView.swift */; };
+		A10000000000000000000003 /* RoomPlanExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* RoomPlanExport.swift */; };
+		A10000000000000000000004 /* Assets in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B10000000000000000000001 /* SpaceMapLiDARApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPlanCompanion/SpaceMapLiDARApp.swift; sourceTree = "<group>"; };
+		B10000000000000000000002 /* RoomPlanScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPlanCompanion/RoomPlanScannerView.swift; sourceTree = "<group>"; };
+		B10000000000000000000003 /* RoomPlanExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomPlanCompanion/RoomPlanExport.swift; sourceTree = "<group>"; };
+		B10000000000000000000004 /* SpaceMapLiDAR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SpaceMapLiDAR.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000000000000000000005 = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = RoomPlanCompanion/Assets.xcassets; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		C10000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		D10000000000000000000001 = {isa = PBXGroup; children = (D10000000000000000000002 /* Sources */, D10000000000000000000003 /* Products */, ); sourceTree = "<group>"; };
+		D10000000000000000000002 /* Sources */ = {isa = PBXGroup; children = (B10000000000000000000001 /* SpaceMapLiDARApp.swift */, B10000000000000000000002 /* RoomPlanScannerView.swift */, B10000000000000000000003 /* RoomPlanExport.swift */, B10000000000000000000005, ); name = Sources; sourceTree = "<group>"; };
+		D10000000000000000000003 /* Products */ = {isa = PBXGroup; children = (B10000000000000000000004 /* SpaceMapLiDAR.app */, ); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E10000000000000000000001 /* SpaceMapLiDAR */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F10000000000000000000002 /* Build configuration list for PBXNativeTarget */;
+			buildPhases = (C10000000000000000000002 /* Sources */, C10000000000000000000001 /* Frameworks */, C10000000000000000000003 /* Resources */, );
+			buildRules = ();
+			dependencies = ();
+			name = SpaceMapLiDAR;
+			productName = SpaceMapLiDAR;
+			productReference = B10000000000000000000004 /* SpaceMapLiDAR.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E10000000000000000000002 /* Project object */ = {
+			isa = PBXProject;
+			attributes = { BuildIndependentTargetsInParallel = 1; LastUpgradeCheck = 1600; TargetAttributes = { E10000000000000000000001 = {CreatedOnToolsVersion = 16.0; }; }; };
+			buildConfigurationList = F10000000000000000000001 /* Build configuration list for PBXProject */;
+			compatibilityVersion = "Xcode 15.0";
+			mainGroup = D10000000000000000000001;
+			productRefGroup = D10000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (E10000000000000000000001 /* SpaceMapLiDAR */, );
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C10000000000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000004,); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C10000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* SpaceMapLiDARApp.swift in Sources */, A10000000000000000000002 /* RoomPlanScannerView.swift in Sources */, A10000000000000000000003 /* RoomPlanExport.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+			F20000000000000000000001 /* Debug Project */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; }; name = Debug; };
+			F20000000000000000000002 /* Release Project */ = {isa = XCBuildConfiguration; buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; }; name = Release; };
+			F20000000000000000000003 /* Debug App */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = "Карта пространства"; INFOPLIST_KEY_NSCameraUsageDescription = "Камера и LiDAR используются для измерения стен, дверей и объектов помещения."; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIUserInterfaceStyle = Automatic; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = ru.vladikgolosnoi.spacemap.lidar; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
+			F20000000000000000000004 /* Release App */ = {isa = XCBuildConfiguration; buildSettings = {ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon; CODE_SIGN_STYLE = Automatic; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = "Карта пространства"; INFOPLIST_KEY_NSCameraUsageDescription = "Камера и LiDAR используются для измерения стен, дверей и объектов помещения."; INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES; INFOPLIST_KEY_UILaunchScreen_Generation = YES; INFOPLIST_KEY_UIUserInterfaceStyle = Automatic; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = ru.vladikgolosnoi.spacemap.lidar; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_EMIT_LOC_STRINGS = YES; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+			F10000000000000000000001 /* Build configuration list for PBXProject */ = {isa = XCConfigurationList; buildConfigurations = (F20000000000000000000001 /* Debug Project */, F20000000000000000000002 /* Release Project */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+			F10000000000000000000002 /* Build configuration list for PBXNativeTarget */ = {isa = XCConfigurationList; buildConfigurations = (F20000000000000000000003 /* Debug App */, F20000000000000000000004 /* Release App */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = E10000000000000000000002 /* Project object */;
+}
