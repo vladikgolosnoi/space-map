@@ -64,7 +64,7 @@ class Storage:
                     organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
                     email TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','editor','viewer')),
                     invited_by TEXT NOT NULL REFERENCES users(id), expires_at REAL NOT NULL,
-                    created_at REAL NOT NULL
+                    created_at REAL NOT NULL, invite_id TEXT NOT NULL DEFAULT ''
                 );
                 CREATE TABLE IF NOT EXISTS account_sessions (
                     token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -94,6 +94,13 @@ class Storage:
             space_columns = {row[1] for row in connection.execute("PRAGMA table_info(spaces)")}
             if "organization_id" not in space_columns:
                 connection.execute("ALTER TABLE spaces ADD COLUMN organization_id TEXT REFERENCES organizations(id)")
+            invite_columns = {row[1] for row in connection.execute("PRAGMA table_info(organization_invites)")}
+            if "invite_id" not in invite_columns:
+                connection.execute("ALTER TABLE organization_invites ADD COLUMN invite_id TEXT NOT NULL DEFAULT ''")
+            for token_hash, in connection.execute("SELECT token_hash FROM organization_invites WHERE invite_id='' OR invite_id IS NULL").fetchall():
+                connection.execute("UPDATE organization_invites SET invite_id=? WHERE token_hash=?",
+                                   (hashlib.sha256(token_hash.encode("ascii")).hexdigest()[:24], token_hash))
+            connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS organization_invites_id_idx ON organization_invites(invite_id)")
             # Idempotent migration: existing accounts and their spaces become personal workspaces.
             for user_id, name, created_at in connection.execute("SELECT id,organization,created_at FROM users").fetchall():
                 organization_id = "org-" + user_id
@@ -297,7 +304,7 @@ class Storage:
                                      (slug, user_id, *allowed)).fetchone()
         return row is not None
 
-    def create_invite(self, organization_id: str, invited_by: str, email: str, role: str, token_hash: str, expires_at: float) -> None:
+    def create_invite(self, organization_id: str, invited_by: str, email: str, role: str, token_hash: str, expires_at: float, invite_id: str) -> None:
         if role not in {"admin", "editor", "viewer"}:
             raise ValueError("Недопустимая роль")
         now = time.time()
@@ -308,8 +315,28 @@ class Storage:
             existing = connection.execute("SELECT 1 FROM organization_members WHERE organization_id=? AND user_id=(SELECT id FROM users WHERE email=?)", (organization_id, email)).fetchone()
             if existing:
                 raise ValueError("Этот пользователь уже в команде")
-            connection.execute("INSERT INTO organization_invites(token_hash,organization_id,email,role,invited_by,expires_at,created_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(token_hash) DO NOTHING",
-                               (token_hash, organization_id, email, role, invited_by, expires_at, now))
+            connection.execute("INSERT INTO organization_invites(token_hash,organization_id,email,role,invited_by,expires_at,created_at,invite_id) VALUES(?,?,?,?,?,?,?,?)",
+                               (token_hash, organization_id, email, role, invited_by, expires_at, now, invite_id))
+
+    def list_invites(self, organization_id: str, user_id: str) -> list[dict]:
+        now = time.time()
+        with self.connect() as connection:
+            membership = connection.execute("SELECT role FROM organization_members WHERE organization_id=? AND user_id=?", (organization_id, user_id)).fetchone()
+            if not membership or membership[0] not in {"owner", "admin"}:
+                raise PermissionError("Управлять приглашениями может владелец или администратор")
+            connection.execute("DELETE FROM organization_invites WHERE expires_at<=?", (now,))
+            rows = connection.execute("SELECT invite_id,email,role,expires_at,created_at FROM organization_invites WHERE organization_id=? ORDER BY created_at DESC", (organization_id,)).fetchall()
+        return [{"id": row[0], "email": row[1], "role": row[2], "expiresAt": row[3], "createdAt": row[4]} for row in rows]
+
+    def revoke_invite(self, organization_id: str, actor_id: str, invite_id: str) -> None:
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            membership = connection.execute("SELECT role FROM organization_members WHERE organization_id=? AND user_id=?", (organization_id, actor_id)).fetchone()
+            if not membership or membership[0] not in {"owner", "admin"}:
+                raise PermissionError("Отозвать приглашение может владелец или администратор")
+            cursor = connection.execute("DELETE FROM organization_invites WHERE organization_id=? AND invite_id=?", (organization_id, invite_id))
+            if cursor.rowcount == 0:
+                raise KeyError("Приглашение уже принято, отозвано или истекло")
 
     def accept_invite(self, user_id: str, email: str, token_hash: str) -> dict:
         with self.connect() as connection:

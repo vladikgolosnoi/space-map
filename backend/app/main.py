@@ -219,14 +219,42 @@ def create_app(db_path: str | Path | None = None, admin_password: str | None = N
         if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
             raise HTTPException(422, "Введите корректный адрес электронной почты")
         token = secrets.token_urlsafe(32)
+        invite_id = secrets.token_urlsafe(18)
+        expires_at = time.time() + 7 * 86400
         try:
             storage.create_invite(body.organizationId, user["id"], email, body.role,
-                                  hashlib.sha256(token.encode()).hexdigest(), time.time() + 7 * 86400)
+                                  hashlib.sha256(token.encode()).hexdigest(), expires_at, invite_id)
         except PermissionError as error:
             raise HTTPException(403, str(error)) from error
         except ValueError as error:
             raise HTTPException(409, str(error)) from error
-        return {"token": token, "email": email, "role": body.role, "expiresAt": time.time() + 7 * 86400}
+        return {"id": invite_id, "token": token, "email": email, "role": body.role, "expiresAt": expires_at}
+
+    @app.get("/api/organizations/{organization_id}/invites")
+    def list_organization_invites(organization_id: str, request: Request, response: Response):
+        user = account_user(request)
+        if not user:
+            raise HTTPException(401, "Войдите в аккаунт")
+        try:
+            invites = storage.list_invites(organization_id, user["id"])
+        except PermissionError as error:
+            raise HTTPException(404, "Команда не найдена") from error
+        response.headers["Cache-Control"] = "no-store"
+        return {"invites": invites}
+
+    @app.delete("/api/organizations/{organization_id}/invites/{invite_id}", status_code=204)
+    def revoke_organization_invite(organization_id: str, invite_id: str, request: Request):
+        same_origin(request)
+        user = account_user(request)
+        if not user:
+            raise HTTPException(401, "Войдите в аккаунт")
+        try:
+            storage.revoke_invite(organization_id, user["id"], invite_id)
+        except PermissionError as error:
+            raise HTTPException(403, str(error)) from error
+        except KeyError as error:
+            raise HTTPException(404, str(error)) from error
+        return Response(status_code=204)
 
     @app.post("/api/organizations/invites/accept")
     def accept_organization_invite(body: InviteAcceptRequest, request: Request):

@@ -153,6 +153,31 @@ test('team invitation joins an email-matched account and enables shared editor a
   }
 });
 
+test('organization owner can review and revoke a pending invite from the account portal', async ({ page }) => {
+  await page.goto('/register');
+  await page.getByLabel('Ваше имя').fill('Владелец пространства');
+  await page.getByLabel('Электронная почта').fill(`invite-owner-${crypto.randomUUID()}@example.test`);
+  await page.getByLabel('Пароль').fill('invite-owner-playwright-password');
+  await page.getByRole('button', { name: 'Создать аккаунт' }).click();
+  await expect(page).toHaveURL(/\/account$/);
+
+  const guestEmail = `invite-pending-${crypto.randomUUID()}@example.test`;
+  await page.getByLabel('Email участника').fill(guestEmail);
+  await page.getByRole('button', { name: 'Создать ссылку-приглашение' }).click();
+  const inviteUrl = await page.locator('.portal-invite-link input').inputValue();
+  const inviteToken = new URL(inviteUrl).searchParams.get('invite');
+  expect(inviteToken).toBeTruthy();
+
+  const activeInvite = page.locator('.portal-invite-row').filter({ hasText: guestEmail });
+  await expect(activeInvite).toContainText('Редактор');
+  page.once('dialog', (dialog) => dialog.accept());
+  await activeInvite.getByRole('button', { name: 'Отозвать' }).click();
+  await expect(page.getByRole('status')).toContainText('Приглашение отозвано');
+  await expect(activeInvite).toHaveCount(0);
+  const response = await page.request.post('/api/organizations/invites/accept', { data: { token: inviteToken } });
+  expect(response.status()).toBe(404);
+});
+
 async function point(page: import('@playwright/test').Page, x: number, y: number) {
   const canvas = page.getByTestId('plan-editor-canvas');
   await canvas.scrollIntoViewIfNeeded();

@@ -1,9 +1,12 @@
 from io import BytesIO
+import sqlite3
+import hashlib
 
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from backend.app.main import create_app
+from backend.app.storage import Storage
 
 
 def account(tmp_path, email="owner@example.com", password="long-enough-password"):
@@ -205,3 +208,54 @@ def test_team_invite_roles_scope_private_maps_and_media(tmp_path):
     assert owner.delete(f"/api/organizations/{org['id']}/members/{viewer.get('/api/auth/session').json()['user']['id']}").status_code == 204
     assert viewer.get(f"/api/spaces/{project['slug']}?view=draft").status_code == 401
     assert viewer.get(f"/api/spaces/{project['slug']}").status_code == 200  # Published link remains public.
+
+
+def test_team_owner_can_revoke_pending_invite_and_member_cannot_list_or_revoke(tmp_path):
+    owner = account(tmp_path)
+    org = owner.get("/api/account").json()["organizations"][0]
+    owner_invite = owner.post("/api/organizations/invites", json={
+        "organizationId": org["id"], "email": "pending@example.com", "role": "viewer"
+    }).json()
+    listed = owner.get(f"/api/organizations/{org['id']}/invites")
+    assert listed.status_code == 200
+    listed_invite = listed.json()["invites"][0]
+    assert len(listed.json()["invites"]) == 1
+    assert listed_invite["id"] == owner_invite["id"]
+    assert listed_invite["email"] == "pending@example.com"
+    assert listed_invite["role"] == "viewer"
+    assert listed_invite["expiresAt"] > listed_invite["createdAt"]
+    assert owner_invite["id"] != owner_invite["token"]
+
+    member_invite = owner.post("/api/organizations/invites", json={
+        "organizationId": org["id"], "email": "member@example.com", "role": "viewer"
+    }).json()
+    member = account(tmp_path, "member@example.com", "member-long-password")
+    assert member.post("/api/organizations/invites/accept", json={"token": member_invite["token"]}).status_code == 200
+    assert member.get(f"/api/organizations/{org['id']}/invites").status_code == 404
+    assert member.delete(f"/api/organizations/{org['id']}/invites/{owner_invite['id']}").status_code == 403
+
+    assert owner.delete(f"/api/organizations/{org['id']}/invites/{owner_invite['id']}").status_code == 204
+    assert owner.get(f"/api/organizations/{org['id']}/invites").json()["invites"] == []
+    assert member.post("/api/organizations/invites/accept", json={"token": owner_invite["token"]}).status_code == 404
+    assert owner.delete(f"/api/organizations/{org['id']}/invites/{owner_invite['id']}").status_code == 404
+
+
+def test_existing_invite_schema_migrates_pending_rows_without_losing_tokens(tmp_path):
+    db_path = tmp_path / "legacy-invites.db"
+    token_hash = hashlib.sha256(b"legacy-secret-token").hexdigest()
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("""CREATE TABLE organization_invites (
+            token_hash TEXT PRIMARY KEY, organization_id TEXT NOT NULL, email TEXT NOT NULL,
+            role TEXT NOT NULL, invited_by TEXT NOT NULL, expires_at REAL NOT NULL, created_at REAL NOT NULL
+        )""")
+        connection.execute("INSERT INTO organization_invites VALUES (?,?,?,?,?,?,?)",
+                           (token_hash, "org-legacy", "pending@example.com", "viewer", "legacy", 4_000_000_000, 1))
+
+    storage = Storage(db_path)
+    assert storage.create_user("legacy", "legacy@example.com", "Legacy owner", "unused")
+    invites = storage.list_invites("org-legacy", "legacy")
+    assert len(invites) == 1
+    assert invites[0]["id"] == hashlib.sha256(token_hash.encode("ascii")).hexdigest()[:24]
+    storage.revoke_invite("org-legacy", "legacy", invites[0]["id"])
+    with storage.connect() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM organization_invites").fetchone()[0] == 0

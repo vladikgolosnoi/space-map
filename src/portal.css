@@ -79,3 +79,4 @@
   .portal-welcome h1{font-size:28px;line-height:1.08}
   .portal-welcome .portal-mark{display:none}
 }
+.portal-feedback{max-width:1120px;margin:12px auto;padding:12px 14px;border:1px solid #bfdfcf;border-radius:10px;background:#f0f8f4;color:#285a43;font-size:13px;line-height:1.5}.portal-invites{margin-top:20px;border-top:1px solid #edf0f0;padding-top:16px}.portal-invites h3{margin:0;color:var(--ink);font-size:14px}.portal-invites>p{margin:5px 0 10px;color:var(--muted);font-size:12px}.portal-invite-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px;border-top:1px solid #edf0f0}.portal-invite-row>div{display:grid;gap:4px;min-width:0}.portal-invite-row strong{font-size:12px;overflow-wrap:anywhere}.portal-invite-row span{color:var(--muted);font-size:11px}
