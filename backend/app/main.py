@@ -7,7 +7,6 @@ import os
 import re
 import secrets
 import time
-from collections import defaultdict, deque
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -50,7 +49,6 @@ def create_app(db_path: str | Path | None = None, admin_password: str | None = N
     password_hash = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), secret, 200_000)
     signing_key = hmac.new(secret, password_hash, hashlib.sha256).digest()
     allowed_origins = {origin.rstrip("/") for origin in os.getenv("SPACE_ALLOWED_ORIGINS", "").split(",") if origin}
-    failed_logins: dict[str, deque[float]] = defaultdict(deque)
     app = FastAPI(title="Карта пространства", version="0.1.0", description="Первый вертикальный сценарий; вымышленный демоцентр.")
     app.state.storage = storage
     app.add_middleware(TextCompression)
@@ -116,6 +114,10 @@ def create_app(db_path: str | Path | None = None, admin_password: str | None = N
     def password_digest(password: str, salt: bytes) -> str:
         return salt.hex() + "$" + hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 310_000).hex()
 
+    def auth_bucket(action: str, peer: str) -> str:
+        value = f"auth-rate-limit:{action}:{peer}".encode("utf-8")
+        return hmac.new(secret, value, hashlib.sha256).hexdigest()
+
     def valid_slug(slug: str) -> bool:
         return bool(re.fullmatch(r"[a-z0-9][a-z0-9-]{2,79}", slug))
 
@@ -143,16 +145,13 @@ def create_app(db_path: str | Path | None = None, admin_password: str | None = N
         if len(email) > 254 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
             raise HTTPException(422, "Введите корректный адрес электронной почты")
         peer = request.client.host if request.client else "unknown"
-        attempts = failed_logins[f"register:{peer}"]
-        now = time.monotonic()
-        while attempts and attempts[0] < now - 60:
-            attempts.popleft()
-        if len(attempts) >= 5:
+        bucket = auth_bucket("register", peer)
+        if not storage.try_auth_attempt(bucket, 5, 60):
             raise HTTPException(429, "Слишком много регистраций. Повторите через минуту.", headers={"Retry-After": "60"})
         user_id, salt = secrets.token_hex(16), secrets.token_bytes(16)
         if not storage.create_user(user_id, email, body.name.strip(), password_digest(body.password, salt), body.organization.strip()):
-            attempts.append(now)
             raise HTTPException(409, "Аккаунт с такой почтой уже существует. Войдите или восстановите пароль.")
+        storage.clear_auth_attempts(bucket)
         set_account_cookie(request, response, user_id)
         response.headers["Cache-Control"] = "no-store"
         return {"authenticated": True, "user": storage.get_user(user_id)}
@@ -161,11 +160,8 @@ def create_app(db_path: str | Path | None = None, admin_password: str | None = N
     def account_login(body: AccountLoginRequest, request: Request, response: Response):
         same_origin(request)
         peer = request.client.host if request.client else "unknown"
-        attempts = failed_logins[f"account:{peer}"]
-        now = time.monotonic()
-        while attempts and attempts[0] < now - 60:
-            attempts.popleft()
-        if len(attempts) >= 10:
+        bucket = auth_bucket("account", peer)
+        if not storage.try_auth_attempt(bucket, 10, 60):
             raise HTTPException(429, "Слишком много попыток. Повторите через минуту.", headers={"Retry-After": "60"})
         user = storage.get_user_by_email(body.email.strip().casefold())
         try:
@@ -174,9 +170,8 @@ def create_app(db_path: str | Path | None = None, admin_password: str | None = N
         except (ValueError, TypeError):
             computed = password_digest(body.password, bytes(16))
         if not user or not secrets.compare_digest(computed, user["password_hash"]):
-            attempts.append(now)
             raise HTTPException(401, "Не удалось войти. Проверьте почту и пароль.")
-        attempts.clear()
+        storage.clear_auth_attempts(bucket)
         set_account_cookie(request, response, user["id"])
         response.headers["Cache-Control"] = "no-store"
         return {"authenticated": True, "user": storage.get_user(user["id"])}
@@ -399,17 +394,13 @@ def create_app(db_path: str | Path | None = None, admin_password: str | None = N
     def login(body: SessionRequest, request: Request, response: Response):
         same_origin(request)
         peer = request.client.host if request.client else "unknown"
-        attempts = failed_logins[peer]
-        now = time.monotonic()
-        while attempts and attempts[0] < now - 60:
-            attempts.popleft()
-        if len(attempts) >= 10:
+        bucket = auth_bucket("organizer", peer)
+        if not storage.try_auth_attempt(bucket, 10, 60):
             raise HTTPException(429, "Слишком много попыток. Повторите через минуту.", headers={"Retry-After": "60"})
         supplied = hashlib.pbkdf2_hmac("sha256", body.password.encode("utf-8"), secret, 200_000)
         if not secrets.compare_digest(supplied, password_hash):
-            attempts.append(now)
             raise HTTPException(401, "Неверный пароль организатора")
-        attempts.clear()
+        storage.clear_auth_attempts(bucket)
         previous_hash = token_hash_from_cookie(request)
         if previous_hash:
             storage.delete_session(previous_hash)

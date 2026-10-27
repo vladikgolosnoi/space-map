@@ -70,6 +70,9 @@ class Storage:
                     token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                     expires_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS auth_attempts (
+                    bucket_id TEXT PRIMARY KEY, attempts INTEGER NOT NULL, window_started REAL NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS spaces (
                     slug TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                     title TEXT NOT NULL, revision INTEGER NOT NULL, document TEXT NOT NULL,
@@ -110,7 +113,7 @@ class Storage:
                                    (organization_id, user_id, "owner", created_at))
                 connection.execute("UPDATE spaces SET organization_id=? WHERE owner_id=? AND organization_id IS NULL",
                                    (organization_id, user_id))
-            connection.execute("PRAGMA user_version = 6")
+            connection.execute("PRAGMA user_version = 8")
             project = demo_project()
             connection.execute("INSERT OR IGNORE INTO projects VALUES (?, ?, ?)",
                                (project.id, project.revision, project.model_dump_json()))
@@ -243,6 +246,25 @@ class Storage:
     def delete_account_session(self, token_hash: str) -> None:
         with self.connect() as connection:
             connection.execute("DELETE FROM account_sessions WHERE token_hash=?", (token_hash,))
+
+    def try_auth_attempt(self, bucket_id: str, limit: int, window_seconds: int) -> bool:
+        now = time.time()
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute("SELECT attempts,window_started FROM auth_attempts WHERE bucket_id=?", (bucket_id,)).fetchone()
+            if row and now - row[1] < window_seconds and row[0] >= limit:
+                return False
+            if not row or now - row[1] >= window_seconds:
+                connection.execute("INSERT INTO auth_attempts(bucket_id,attempts,window_started) VALUES(?,?,?) ON CONFLICT(bucket_id) DO UPDATE SET attempts=excluded.attempts,window_started=excluded.window_started",
+                                   (bucket_id, 1, now))
+            else:
+                connection.execute("UPDATE auth_attempts SET attempts=attempts+1 WHERE bucket_id=?", (bucket_id,))
+            connection.execute("DELETE FROM auth_attempts WHERE window_started<?", (now - 86400,))
+            return True
+
+    def clear_auth_attempts(self, bucket_id: str) -> None:
+        with self.connect() as connection:
+            connection.execute("DELETE FROM auth_attempts WHERE bucket_id=?", (bucket_id,))
 
     def create_space(self, owner_id: str, project: Project, organization_id: str | None = None) -> None:
         now = time.time()

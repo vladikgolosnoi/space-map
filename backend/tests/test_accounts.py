@@ -1,6 +1,7 @@
 from io import BytesIO
 import sqlite3
 import hashlib
+import time
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -154,6 +155,36 @@ def test_account_login_rotates_a_private_session_and_rejects_wrong_password(tmp_
     assert client.get("/api/auth/session").json()["authenticated"]
     client.cookies.set("space_account", old_token)
     assert not client.get("/api/auth/session").json()["authenticated"]
+
+
+def test_login_throttle_is_persistent_across_app_restart_and_clears_after_success(tmp_path):
+    db_path = tmp_path / "rate-limit.db"
+    first = TestClient(create_app(db_path, "demo-admin-password"))
+    assert first.post("/api/auth/register", json={
+        "name": "Owner", "email": "owner@example.com", "password": "long-enough-password"
+    }).status_code == 201
+    for _ in range(10):
+        response = first.post("/api/auth/login", json={"email": "owner@example.com", "password": "wrong-password"})
+        assert response.status_code == 401
+
+    restarted = TestClient(create_app(db_path, "demo-admin-password"))
+    locked = restarted.post("/api/auth/login", json={"email": "owner@example.com", "password": "long-enough-password"})
+    assert locked.status_code == 429
+    storage = restarted.app.state.storage
+    with storage.connect() as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
+        row = connection.execute("SELECT bucket_id,attempts FROM auth_attempts").fetchone()
+        assert row and row[1] == 10 and row[0] != "testclient"
+        connection.execute("UPDATE auth_attempts SET window_started=?", (time.time() - 61,))
+
+    assert restarted.post("/api/auth/login", json={
+        "email": "owner@example.com", "password": "long-enough-password"
+    }).status_code == 200
+    assert restarted.post("/api/auth/login", json={
+        "email": "owner@example.com", "password": "wrong-password"
+    }).status_code == 401
+    with storage.connect() as connection:
+        assert connection.execute("SELECT attempts FROM auth_attempts").fetchone()[0] == 1
 
 
 def test_team_invite_roles_scope_private_maps_and_media(tmp_path):
