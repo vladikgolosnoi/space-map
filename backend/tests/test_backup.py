@@ -1,6 +1,7 @@
 import io
 import sqlite3
 import tarfile
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,10 +14,12 @@ def make_database(path):
             CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE projects (id TEXT PRIMARY KEY, revision INTEGER, document TEXT);
             CREATE TABLE publications (id TEXT PRIMARY KEY, revision INTEGER, document TEXT);
+            CREATE TABLE assets (id TEXT PRIMARY KEY, filename TEXT NOT NULL, metadata TEXT NOT NULL);
             PRAGMA user_version = 8;
         """)
         connection.execute("INSERT INTO projects VALUES ('space', 1, '{}')")
         connection.execute("INSERT INTO publications VALUES ('space', 1, '{}')")
+        connection.execute("INSERT INTO assets VALUES ('asset', 'floor.png', '{}')")
 
 
 def make_archive(path, filename="media/floor.png", content=b"test image"):
@@ -34,7 +37,7 @@ def test_backup_restore_check_validates_database_and_restores_media(tmp_path):
 
     result = verify_backup(database, media)
 
-    assert result == {"schema_version": 8, "documents": 2, "media_files": 1}
+    assert result == {"schema_version": 8, "documents": 2, "media_files": 1, "assets_checked": 1}
     # The source archive remains unchanged; restore output lives in a temp directory.
     with tarfile.open(media, "r:gz") as archive:
         assert archive.extractfile("media/floor.png").read() == b"test image"
@@ -57,4 +60,25 @@ def test_backup_restore_check_rejects_traversal_in_media_archive(tmp_path):
     make_archive(media, "media/../../outside.png")
 
     with pytest.raises(ValueError, match="Unsafe"):
+        verify_backup(database, media)
+
+
+def test_backup_restore_check_rejects_media_missing_from_archive(tmp_path):
+    database = tmp_path / "space.db"
+    media = tmp_path / "media.tar.gz"
+    make_database(database)
+    make_archive(media, "media/other.png")
+
+    with pytest.raises(ValueError, match="missing"):
+        verify_backup(database, media)
+
+
+def test_backup_restore_check_fails_before_copy_when_temp_space_is_insufficient(tmp_path, monkeypatch):
+    database = tmp_path / "space.db"
+    media = tmp_path / "media.tar.gz"
+    make_database(database)
+    make_archive(media)
+    monkeypatch.setattr("scripts.verify_backup.shutil.disk_usage", lambda _: SimpleNamespace(free=1))
+
+    with pytest.raises(ValueError, match="free space"):
         verify_backup(database, media)
