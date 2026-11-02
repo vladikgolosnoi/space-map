@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, Building2, Check, Copy, Eye, Layers3, LogOut, MapPin, Plus, Search, ShieldCheck, Sparkles } from 'lucide-react';
-import { api, type OrganizationInvite, type OrganizationMember, type OrganizationSummary, type SpaceSummary } from './api';
+import { Activity, ArrowRight, Building2, Check, Copy, Eye, Layers3, LogOut, MapPin, Plus, Search, ShieldCheck, Sparkles } from 'lucide-react';
+import { api, type OrganizationAuditEvent, type OrganizationInvite, type OrganizationMember, type OrganizationSummary, type SpaceSummary } from './api';
 import './portal.css';
 
 type Account = { id: string; email: string; name: string; organization: string };
@@ -9,6 +9,11 @@ const viewsLabel = (value: number) => {
   return `${value} ${part === 'one' ? 'просмотр' : part === 'few' ? 'просмотра' : 'просмотров'}`;
 };
 const roleLabel: Record<string, string> = { owner: 'Владелец', admin: 'Администратор', editor: 'Редактор', viewer: 'Просмотр' };
+const auditActionLabel: Record<string, string> = {
+  'organization.created': 'создал команду', 'space.created': 'создал карту', 'space.updated': 'сохранил изменения',
+  'space.published': 'опубликовал карту', 'invite.created': 'создал приглашение', 'invite.revoked': 'отозвал приглашение',
+  'invite.accepted': 'принял приглашение', 'member.role_changed': 'изменил роль участника', 'member.removed': 'удалил участника',
+};
 
 export default function Portal() {
   const mode = location.pathname === '/' ? 'home' : location.pathname === '/register' ? 'register' : location.pathname === '/login' ? 'login' : 'account';
@@ -29,6 +34,11 @@ export default function Portal() {
   const [organizationId, setOrganizationId] = useState('');
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [invites, setInvites] = useState<OrganizationInvite[]>([]);
+  const [auditEvents, setAuditEvents] = useState<OrganizationAuditEvent[]>([]);
+  const [auditCursor, setAuditCursor] = useState<number | null>(null);
+  const [auditHasMore, setAuditHasMore] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState('');
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState('');
   const [membersReload, setMembersReload] = useState(0);
@@ -135,6 +145,45 @@ export default function Portal() {
       .catch(() => { if (active) setInvites([]); });
     return () => { active = false; };
   }, [organizationId, organizations, user?.id, membersReload]);
+  useEffect(() => {
+    const role = organizations.find((org) => org.id === organizationId)?.role;
+    if (!organizationId || !user || !['owner', 'admin'].includes(role ?? '')) {
+      setAuditEvents([]);
+      setAuditCursor(null);
+      setAuditHasMore(false);
+      setAuditError('');
+      return;
+    }
+    let active = true;
+    setAuditEvents([]);
+    setAuditCursor(null);
+    setAuditHasMore(false);
+    setAuditError('');
+    setAuditLoading(true);
+    void api.teamAudit(organizationId)
+      .then((data) => {
+        if (!active) return;
+        setAuditEvents(data.events);
+        setAuditCursor(data.nextBeforeId);
+        setAuditHasMore(data.nextBeforeId !== null);
+      })
+      .catch((err) => { if (active) setAuditError(err instanceof Error ? err.message : 'Не удалось загрузить журнал действий.'); })
+      .finally(() => { if (active) setAuditLoading(false); });
+    return () => { active = false; };
+  }, [organizationId, organizations, user?.id, membersReload]);
+  const loadOlderAudit = async () => {
+    if (!organizationId || !auditCursor || auditLoading) return;
+    setAuditLoading(true);
+    setAuditError('');
+    try {
+      const data = await api.teamAudit(organizationId, auditCursor);
+      setAuditEvents((current) => [...current, ...data.events]);
+      setAuditCursor(data.nextBeforeId);
+      setAuditHasMore(data.nextBeforeId !== null);
+    } catch (err) {
+      setAuditError(err instanceof Error ? err.message : 'Не удалось загрузить журнал действий.');
+    } finally { setAuditLoading(false); }
+  };
   const sendInvite = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!organizationId) return;
@@ -145,17 +194,18 @@ export default function Portal() {
       setInviteEmail('');
       setInvites((await api.teamInvites(organizationId)).invites);
       setMembers((await api.teamMembers(organizationId)).members);
+      setMembersReload((attempt) => attempt + 1);
     } catch (err) { setError(err instanceof Error ? err.message : 'Не удалось создать приглашение.'); }
     finally { setBusy(false); }
   };
   const changeRole = async (member: OrganizationMember, role: string) => {
     if (!organizationId) return;
-    try { setMembers((await api.updateMemberRole(organizationId, member.id, role)).members); }
+    try { setMembers((await api.updateMemberRole(organizationId, member.id, role)).members); setMembersReload((attempt) => attempt + 1); }
     catch (err) { setError(err instanceof Error ? err.message : 'Не удалось изменить роль.'); }
   };
   const removeMember = async (member: OrganizationMember) => {
     if (!organizationId) return;
-    try { await api.removeMember(organizationId, member.id); setMembers((await api.teamMembers(organizationId)).members); }
+    try { await api.removeMember(organizationId, member.id); setMembers((await api.teamMembers(organizationId)).members); setMembersReload((attempt) => attempt + 1); }
     catch (err) { setError(err instanceof Error ? err.message : 'Не удалось удалить участника.'); }
   };
   const revokeInvite = async (invite: OrganizationInvite) => {
@@ -166,6 +216,7 @@ export default function Portal() {
     try {
       await api.revokeInvite(organizationId, invite.id);
       setInvites((await api.teamInvites(organizationId)).invites);
+      setMembersReload((attempt) => attempt + 1);
       setFeedback('Приглашение отозвано. Его ссылка больше не действует.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось отозвать приглашение.');
@@ -220,6 +271,7 @@ export default function Portal() {
       <div className="portal-list-head"><div><h2>Пространства команды <span>{organizationSpaces.length}</span></h2><p>Карты команды «{selectedOrganization?.name ?? ''}».</p></div><div className="portal-filters"><label className="portal-search"><Search size={15}/><input aria-label="Поиск по картам" placeholder="Найти пространство" value={search} onChange={(e) => setSearch(e.target.value)}/></label><select aria-label="Фильтр карт" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}><option value="all">Все карты</option><option value="draft">Черновики</option><option value="published">Опубликованные</option></select></div></div>
       {filteredSpaces.length ? <div className="portal-space-grid">{filteredSpaces.map((space) => <article className="portal-space-card" key={space.slug}><div className="portal-card-top"><div className="portal-space-icon"><Layers3 size={20} /></div><span className={`portal-space-state ${space.isPublic ? 'published' : 'draft'}`}><i />{space.isPublic ? 'Опубликована' : 'Черновик'}</span></div><h3>{space.title}</h3><div className="portal-space-meta">Обновлена {new Date(space.updatedAt * 1000).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })} · v{space.revision} · {space.role === 'owner' ? 'владелец' : space.role === 'admin' ? 'администратор' : space.role === 'editor' ? 'редактор' : 'просмотр'}{space.isPublic && space.publishedRevision !== space.revision && <span className="portal-stale">Есть неопубликованные изменения</span>}</div><div className="portal-space-metrics"><span><Eye size={15} /> {viewsLabel(space.views)}</span><span>{space.isPublic ? `Публикация v${space.publishedRevision}` : 'Видна только команде'}</span></div><div className="portal-space-actions"><a className={space.role === 'viewer' ? 'portal-secondary' : 'portal-primary'} href={`/editor/${space.slug}`}>{space.role === 'viewer' ? 'Просмотреть черновик' : 'Открыть редактор'} <ArrowRight size={15} /></a>{space.isPublic && <><a className="portal-secondary" href={`/map/${space.slug}`} target="_blank" rel="noreferrer">Открыть карту</a><button className="portal-copy" onClick={() => void copyLink(space.slug)} aria-label="Скопировать ссылку на карту">{copied === space.slug ? <Check size={16}/> : <Copy size={16}/>}</button></>}</div></article>)}</div> : organizationSpaces.length ? <section className="portal-empty portal-empty-small"><div><Search size={21}/></div><h2>Ничего не найдено</h2><p>Измените запрос или фильтр. Пространства не удалены.</p></section> : <section className="portal-empty"><div><MapPin size={23} /></div><h2>{canCreateSpace ? 'Начните с первого пространства' : 'В этой команде пока нет карт'}</h2><p>{canCreateSpace ? 'Создайте карту выше. Она будет приватной, пока вы сами не опубликуете её.' : 'Попросите владельца или редактора команды создать первую карту.'}</p></section>}
       {organizationId && <section className="portal-team"><div className="portal-team-heading"><div><div className="portal-eyebrow">СОВМЕСТНАЯ РАБОТА</div><h2>Команда и доступ</h2><p>Участники видят карты этой команды. Роль определяет, что они могут делать.</p></div><span>{membersLoading ? '\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430\u2026' : membersError ? '\u0421\u043f\u0438\u0441\u043e\u043a \u043d\u0435 \u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d' : members.length} {members.length === 1 ? 'участник' : 'участника'}</span></div>{membersError && <div className="portal-member-error" role="alert"><span>{membersError}</span><button className="portal-secondary" onClick={() => setMembersReload((attempt) => attempt + 1)}>{'\u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u044c'}</button></div>}{membersLoading && <p className="portal-member-state" role="status">{'\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u0435\u043c \u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a\u043e\u0432\u2026'}</p>}<div className="portal-member-list" aria-busy={membersLoading}>{members.map((member) => <div className="portal-member" key={member.id}><div className="portal-member-avatar">{member.name.trim().slice(0,1).toLocaleUpperCase('ru-RU')}</div><div className="portal-member-id"><strong>{member.name}{member.id === user.id ? ' · вы' : ''}</strong><span>{member.email}</span></div>{member.role === 'owner' || organizations.find(o=>o.id===organizationId)?.role === 'viewer' || organizations.find(o=>o.id===organizationId)?.role === 'editor' ? <span className="portal-role-label">{roleLabel[member.role] ?? member.role}</span> : <><select aria-label={`Роль: ${member.name}`} value={member.role} onChange={(e)=>void changeRole(member,e.target.value)} disabled={member.role==='admin'&&organizations.find(o=>o.id===organizationId)?.role!=='owner'}><option value="admin">Администратор</option><option value="editor">Редактор</option><option value="viewer">Просмотр</option></select>{member.id !== user.id && <button className="portal-remove-member" onClick={()=>void removeMember(member)}>Удалить</button>}</>}</div>)}</div>{['owner','admin'].includes(organizations.find(o=>o.id===organizationId)?.role??'') && <form className="portal-invite" onSubmit={sendInvite}><label>Email участника<input type="email" required maxLength={254} value={inviteEmail} onChange={(e)=>setInviteEmail(e.target.value)} placeholder="colleague@company.ru"/></label><label>Доступ<select value={inviteRole} onChange={(e)=>setInviteRole(e.target.value as 'editor'|'viewer')}><option value="editor">Редактор — менять карту</option><option value="viewer">Просмотр — читать черновик команды</option></select></label><button className="portal-primary" disabled={busy||!inviteEmail}>Создать ссылку-приглашение</button></form>}{inviteUrl && <div className="portal-invite-link"><strong>Ссылка действует 7 дней и привязана к указанному email</strong><div><input readOnly value={inviteUrl}/><button className="portal-secondary" onClick={()=>void navigator.clipboard.writeText(inviteUrl)}>Скопировать</button></div></div>}{['owner','admin'].includes(organizations.find((org) => org.id === organizationId)?.role ?? '') && invites.length > 0 && <div className="portal-invites"><h3>Активные приглашения</h3><p>Отозванная ссылка перестанет работать сразу.</p>{invites.map((invite) => <div className="portal-invite-row" key={invite.id}><div><strong>{invite.email}</strong><span>{roleLabel[invite.role] ?? invite.role} · истекает {new Date(invite.expiresAt * 1000).toLocaleDateString('ru-RU')}</span></div><button className="portal-remove-member" disabled={busy} onClick={() => void revokeInvite(invite)}>Отозвать</button></div>)}</div>}<p className="portal-team-note">Приглашение принимает аккаунт с совпадающим адресом; подтверждения почты пока нет, поэтому передавайте ссылку лично. Отправка почты не настроена.</p></section>}
+      {['owner', 'admin'].includes(selectedOrganization?.role ?? '') && <section className="portal-audit" aria-labelledby="portal-audit-title"><div className="portal-audit-heading"><div><div className="portal-eyebrow">ИСТОРИЯ КОМАНДЫ</div><h2 id="portal-audit-title">Недавние действия</h2><p>Изменения карт и доступов за последние 180 дней.</p></div><Activity size={20}/></div>{auditError && <div className="portal-member-error" role="alert"><span>{auditError}</span><button className="portal-secondary" onClick={() => setMembersReload((attempt) => attempt + 1)}>Повторить</button></div>}{auditEvents.length === 0 && !auditLoading && !auditError && <p className="portal-audit-empty">Пока нет действий. Здесь появятся изменения карт и команды.</p>}<ol className="portal-audit-list" aria-busy={auditLoading}>{auditEvents.map((event) => <li key={event.id}><span className="portal-audit-dot"/><div><strong>{event.actor}</strong> {auditActionLabel[event.action] ?? 'изменил пространство'}<span className="portal-audit-target">{event.target}</span></div><time dateTime={new Date(event.createdAt * 1000).toISOString()}>{new Date(event.createdAt * 1000).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</time></li>)}</ol>{auditLoading && <p className="portal-audit-empty" role="status">Загружаем журнал…</p>}{auditHasMore && !auditError && <button className="portal-secondary portal-audit-more" disabled={auditLoading} onClick={() => void loadOlderAudit()}>{auditLoading ? 'Загружаем…' : 'Показать более ранние действия'}</button>}</section>}
       <footer className="portal-footer"><a href="/map/demo">Посмотреть демонстрацию</a><span>Редактор · просмотр · публикация по вашей ссылке</span></footer>
     </main>
   );

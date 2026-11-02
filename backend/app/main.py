@@ -237,6 +237,21 @@ def create_app(db_path: str | Path | None = None, admin_password: str | None = N
         response.headers["Cache-Control"] = "no-store"
         return {"invites": invites}
 
+    @app.get("/api/organizations/{organization_id}/audit")
+    def organization_audit(organization_id: str, request: Request, response: Response,
+                          beforeId: int | None = None):
+        user = account_user(request)
+        if not user:
+            raise HTTPException(401, "Войдите в аккаунт")
+        try:
+            records = storage.list_audit_events(organization_id, user["id"], beforeId, 50)
+        except PermissionError as error:
+            raise HTTPException(403, str(error)) from error
+        response.headers["Cache-Control"] = "no-store"
+        has_more = len(records) > 50
+        events = records[:50]
+        return {"events": events, "nextBeforeId": events[-1]["id"] if has_more and events else None}
+
     @app.delete("/api/organizations/{organization_id}/invites/{invite_id}", status_code=204)
     def revoke_organization_invite(organization_id: str, invite_id: str, request: Request):
         same_origin(request)

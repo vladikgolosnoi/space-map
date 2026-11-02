@@ -172,7 +172,7 @@ def test_login_throttle_is_persistent_across_app_restart_and_clears_after_succes
     assert locked.status_code == 429
     storage = restarted.app.state.storage
     with storage.connect() as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
         row = connection.execute("SELECT bucket_id,attempts FROM auth_attempts").fetchone()
         assert row and row[1] == 10 and row[0] != "testclient"
         connection.execute("UPDATE auth_attempts SET window_started=?", (time.time() - 61,))
@@ -271,6 +271,53 @@ def test_team_owner_can_revoke_pending_invite_and_member_cannot_list_or_revoke(t
     assert owner.delete(f"/api/organizations/{org['id']}/invites/{owner_invite['id']}").status_code == 404
 
 
+def test_team_audit_records_important_changes_and_is_admin_only(tmp_path):
+    owner = account(tmp_path)
+    org = owner.get("/api/account").json()["organizations"][0]
+    project = owner.post("/api/spaces", json={"title": "Audit map", "organizationId": org["id"]}).json()
+    invite = owner.post("/api/organizations/invites", json={
+        "organizationId": org["id"], "email": "audit-viewer@example.com", "role": "viewer"
+    }).json()
+    viewer = TestClient(owner.app)
+    assert viewer.post("/api/auth/register", json={
+        "name": "Viewer", "email": "audit-viewer@example.com", "password": "viewer-long-password"
+    }).status_code == 201
+    assert viewer.post("/api/organizations/invites/accept", json={"token": invite["token"]}).status_code == 200
+    assert viewer.get(f"/api/organizations/{org['id']}/audit").status_code == 403
+
+    draft = owner.get(f"/api/spaces/{project['slug']}?view=draft").json()
+    draft["title"] = "Audit map updated"
+    saved = owner.put(f"/api/spaces/{project['slug']}", json=draft)
+    assert saved.status_code == 200
+    assert owner.post(f"/api/spaces/{project['slug']}/publish", json={"revision": saved.json()["revision"]}).status_code == 200
+    viewer_id = viewer.get("/api/auth/session").json()["user"]["id"]
+    assert owner.patch(f"/api/organizations/{org['id']}/members/{viewer_id}", json={"role": "editor"}).status_code == 200
+    assert owner.delete(f"/api/organizations/{org['id']}/members/{viewer_id}").status_code == 204
+
+    response = owner.get(f"/api/organizations/{org['id']}/audit")
+    assert response.status_code == 200
+    events = response.json()["events"]
+    assert [event["action"] for event in events[:6]] == [
+        "member.removed", "member.role_changed", "space.published", "space.updated", "invite.accepted", "invite.created"
+    ]
+    assert [event["actor"] for event in events[:6]] == ["Owner", "Owner", "Owner", "Owner", "Viewer", "Owner"]
+    assert all(invite["token"] not in event["target"] for event in events)
+    assert owner.get(f"/api/organizations/{org['id']}/audit?beforeId={events[1]['id']}").json()["events"][0]["action"] == "space.published"
+
+
+def test_team_audit_keeps_a_bounded_retention_window(tmp_path):
+    client = account(tmp_path)
+    storage = client.app.state.storage
+    organization_id = client.get("/api/account").json()["organizations"][0]["id"]
+    user_id = client.get("/api/auth/session").json()["user"]["id"]
+    with storage.connect() as connection:
+        connection.execute("INSERT INTO audit_events(organization_id,actor_id,actor_name,action,target,created_at) VALUES(?,?,?,?,?,?)",
+                           (organization_id, user_id, "Owner", "old", "expired", time.time() - 181 * 86400))
+    client.post("/api/spaces", json={"title": "Prunes old audit", "organizationId": organization_id})
+    with storage.connect() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM audit_events WHERE organization_id=? AND action='old'", (organization_id,)).fetchone()[0] == 0
+
+
 def test_existing_invite_schema_migrates_pending_rows_without_losing_tokens(tmp_path):
     db_path = tmp_path / "legacy-invites.db"
     token_hash = hashlib.sha256(b"legacy-secret-token").hexdigest()
@@ -283,6 +330,9 @@ def test_existing_invite_schema_migrates_pending_rows_without_losing_tokens(tmp_
                            (token_hash, "org-legacy", "pending@example.com", "viewer", "legacy", 4_000_000_000, 1))
 
     storage = Storage(db_path)
+    with storage.connect() as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert connection.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='audit_events'").fetchone()
     assert storage.create_user("legacy", "legacy@example.com", "Legacy owner", "unused")
     invites = storage.list_invites("org-legacy", "legacy")
     assert len(invites) == 1

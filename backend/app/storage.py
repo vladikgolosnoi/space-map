@@ -73,6 +73,11 @@ class Storage:
                 CREATE TABLE IF NOT EXISTS auth_attempts (
                     bucket_id TEXT PRIMARY KEY, attempts INTEGER NOT NULL, window_started REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS audit_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, organization_id TEXT NOT NULL,
+                    actor_id TEXT NOT NULL, actor_name TEXT NOT NULL, action TEXT NOT NULL,
+                    target TEXT NOT NULL, created_at REAL NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS spaces (
                     slug TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                     title TEXT NOT NULL, revision INTEGER NOT NULL, document TEXT NOT NULL,
@@ -81,6 +86,7 @@ class Storage:
                 );
                 CREATE INDEX IF NOT EXISTS organization_members_user_idx ON organization_members(user_id);
                 CREATE INDEX IF NOT EXISTS spaces_owner_idx ON spaces(owner_id);
+                CREATE INDEX IF NOT EXISTS audit_events_org_id_idx ON audit_events(organization_id,id DESC);
                 CREATE TABLE IF NOT EXISTS space_assets (
                     asset_id TEXT PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
                     space_slug TEXT NOT NULL REFERENCES spaces(slug) ON DELETE CASCADE
@@ -113,7 +119,7 @@ class Storage:
                                    (organization_id, user_id, "owner", created_at))
                 connection.execute("UPDATE spaces SET organization_id=? WHERE owner_id=? AND organization_id IS NULL",
                                    (organization_id, user_id))
-            connection.execute("PRAGMA user_version = 8")
+            connection.execute("PRAGMA user_version = 9")
             project = demo_project()
             connection.execute("INSERT OR IGNORE INTO projects VALUES (?, ?, ?)",
                                (project.id, project.revision, project.model_dump_json()))
@@ -130,6 +136,35 @@ class Storage:
                 yield connection
         finally:
             connection.close()
+
+    @staticmethod
+    def _record_audit(connection: sqlite3.Connection, organization_id: str, actor_id: str,
+                      action: str, target: str) -> None:
+        actor = connection.execute("SELECT display_name FROM users WHERE id=?", (actor_id,)).fetchone()
+        if not actor:
+            return
+        now = time.time()
+        connection.execute("INSERT INTO audit_events(organization_id,actor_id,actor_name,action,target,created_at) VALUES(?,?,?,?,?,?)",
+                           (organization_id, actor_id, actor[0], action, target[:200], now))
+        # Keep a bounded history per organization: 180 days, up to 5,000 newest records.
+        connection.execute("DELETE FROM audit_events WHERE organization_id=? AND created_at<?",
+                           (organization_id, now - 180 * 24 * 60 * 60))
+        connection.execute("DELETE FROM audit_events WHERE organization_id=? AND id NOT IN (SELECT id FROM audit_events WHERE organization_id=? ORDER BY id DESC LIMIT 5000)",
+                           (organization_id, organization_id))
+
+    def list_audit_events(self, organization_id: str, user_id: str,
+                           before_id: int | None = None, limit: int = 50) -> list[dict]:
+        limit = max(1, min(limit, 100))
+        with self.connect() as connection:
+            membership = connection.execute("SELECT role FROM organization_members WHERE organization_id=? AND user_id=?", (organization_id, user_id)).fetchone()
+            if not membership or membership[0] not in {"owner", "admin"}:
+                raise PermissionError("Журнал доступен только владельцу и администраторам")
+            if before_id is None:
+                rows = connection.execute("SELECT id,actor_name,action,target,created_at FROM audit_events WHERE organization_id=? ORDER BY id DESC LIMIT ?", (organization_id, limit + 1)).fetchall()
+            else:
+                rows = connection.execute("SELECT id,actor_name,action,target,created_at FROM audit_events WHERE organization_id=? AND id<? ORDER BY id DESC LIMIT ?", (organization_id, before_id, limit + 1)).fetchall()
+        return [{"id": row[0], "actor": row[1], "action": row[2], "target": row[3], "createdAt": row[4]}
+                for row in rows]
 
     def secret(self) -> bytes:
         with self.connect() as connection:
@@ -218,6 +253,7 @@ class Storage:
                                    (org_id, organization.strip() or "Личное пространство", now))
                 connection.execute("INSERT INTO organization_members(organization_id,user_id,role,joined_at) VALUES(?,?,?,?)",
                                    (org_id, user_id, "owner", now))
+                self._record_audit(connection, org_id, user_id, "organization.created", organization.strip() or "Личное пространство")
             return True
         except sqlite3.IntegrityError:
             return False
@@ -278,6 +314,7 @@ class Storage:
                 raise ValueError("В аккаунте уже 100 карт. Удалите ненужные пространства, чтобы создать новое.")
             connection.execute("INSERT INTO spaces(slug, owner_id, title, revision, document, created_at, updated_at, organization_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                                (project.slug, owner_id, project.title, project.revision, project.model_dump_json(), now, now, organization_id))
+            self._record_audit(connection, organization_id, owner_id, "space.created", project.title)
 
     def get_space(self, slug: str) -> dict | None:
         with self.connect() as connection:
@@ -304,7 +341,11 @@ class Storage:
                 raise PermissionError("Изменять роли может владелец или администратор")
             if not target or target[0] == "owner" or (actor[0] != "owner" and target[0] == "admin"):
                 raise PermissionError("Нельзя изменить роль этого участника")
+            target_email = connection.execute("SELECT email FROM users WHERE id=?", (target_id,)).fetchone()[0]
+            if target[0] == role:
+                return
             connection.execute("UPDATE organization_members SET role=? WHERE organization_id=? AND user_id=?", (role, organization_id, target_id))
+            self._record_audit(connection, organization_id, actor_id, "member.role_changed", f"{target_email}: {target[0]} → {role}")
 
     def remove_member(self, organization_id: str, actor_id: str, target_id: str) -> None:
         with self.connect() as connection:
@@ -315,7 +356,9 @@ class Storage:
                 raise PermissionError("Нет прав удалить участника")
             if target[0] == "owner" or (actor[0] != "owner" and target[0] == "admin"):
                 raise PermissionError("Владелец и администратор не могут удалить этого участника")
+            target_email = connection.execute("SELECT email FROM users WHERE id=?", (target_id,)).fetchone()[0]
             connection.execute("DELETE FROM organization_members WHERE organization_id=? AND user_id=?", (organization_id, target_id))
+            self._record_audit(connection, organization_id, actor_id, "member.removed", target_email)
 
     def can_access_space(self, user_id: str | None, slug: str, permission: str = "read") -> bool:
         if not user_id:
@@ -339,6 +382,7 @@ class Storage:
                 raise ValueError("Этот пользователь уже в команде")
             connection.execute("INSERT INTO organization_invites(token_hash,organization_id,email,role,invited_by,expires_at,created_at,invite_id) VALUES(?,?,?,?,?,?,?,?)",
                                (token_hash, organization_id, email, role, invited_by, expires_at, now, invite_id))
+            self._record_audit(connection, organization_id, invited_by, "invite.created", f"{email} · {role}")
 
     def list_invites(self, organization_id: str, user_id: str) -> list[dict]:
         now = time.time()
@@ -356,9 +400,11 @@ class Storage:
             membership = connection.execute("SELECT role FROM organization_members WHERE organization_id=? AND user_id=?", (organization_id, actor_id)).fetchone()
             if not membership or membership[0] not in {"owner", "admin"}:
                 raise PermissionError("Отозвать приглашение может владелец или администратор")
+            invite = connection.execute("SELECT email,role FROM organization_invites WHERE organization_id=? AND invite_id=?", (organization_id, invite_id)).fetchone()
             cursor = connection.execute("DELETE FROM organization_invites WHERE organization_id=? AND invite_id=?", (organization_id, invite_id))
             if cursor.rowcount == 0:
                 raise KeyError("Приглашение уже принято, отозвано или истекло")
+            self._record_audit(connection, organization_id, actor_id, "invite.revoked", f"{invite[0]} · {invite[1]}")
 
     def accept_invite(self, user_id: str, email: str, token_hash: str) -> dict:
         with self.connect() as connection:
@@ -372,6 +418,7 @@ class Storage:
                                (invite[0], user_id, invite[2], time.time()))
             connection.execute("DELETE FROM organization_invites WHERE token_hash=?", (token_hash,))
             org = connection.execute("SELECT id,name FROM organizations WHERE id=?", (invite[0],)).fetchone()
+            self._record_audit(connection, invite[0], user_id, "invite.accepted", email)
         return {"id": org[0], "name": org[1], "role": invite[2]}
 
     def list_members(self, organization_id: str, user_id: str) -> list[dict]:
@@ -392,7 +439,7 @@ class Storage:
     def save_space(self, owner_id: str, project: Project) -> Project:
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            row = connection.execute("SELECT s.revision FROM spaces s JOIN organization_members m ON m.organization_id=s.organization_id WHERE s.slug=? AND m.user_id=? AND m.role IN ('owner','admin','editor')", (project.slug, owner_id)).fetchone()
+            row = connection.execute("SELECT s.revision,s.organization_id FROM spaces s JOIN organization_members m ON m.organization_id=s.organization_id WHERE s.slug=? AND m.user_id=? AND m.role IN ('owner','admin','editor')", (project.slug, owner_id)).fetchone()
             if not row:
                 raise KeyError("Пространство не найдено")
             if row[0] != project.revision:
@@ -424,12 +471,13 @@ class Storage:
             saved = project.model_copy(update={"revision": project.revision + 1})
             connection.execute("UPDATE spaces SET title=?, revision=?, document=?, updated_at=? WHERE slug=?",
                                (saved.title, saved.revision, saved.model_dump_json(), time.time(), project.slug))
+            self._record_audit(connection, row[1], owner_id, "space.updated", saved.title)
         return saved
 
     def publish_space(self, owner_id: str, slug: str, revision: int) -> Project:
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            row = connection.execute("SELECT s.revision,s.document FROM spaces s JOIN organization_members m ON m.organization_id=s.organization_id WHERE s.slug=? AND m.user_id=? AND m.role IN ('owner','admin')", (slug, owner_id)).fetchone()
+            row = connection.execute("SELECT s.revision,s.document,s.organization_id,s.title FROM spaces s JOIN organization_members m ON m.organization_id=s.organization_id WHERE s.slug=? AND m.user_id=? AND m.role IN ('owner','admin')", (slug, owner_id)).fetchone()
             if not row:
                 raise KeyError("Пространство не найдено")
             if row[0] != revision:
@@ -445,6 +493,7 @@ class Storage:
                     raise InvalidAsset("Медиафайл пространства не найден. Восстановите его перед публикацией.")
             connection.execute("UPDATE spaces SET published_revision=?, published_document=?, is_public=1, updated_at=? WHERE slug=?",
                                (revision, row[1], time.time(), slug))
+            self._record_audit(connection, row[2], owner_id, "space.published", row[3])
         return Project.model_validate_json(row[1])
 
     def record_space_view(self, slug: str, visitor_id: str) -> bool:

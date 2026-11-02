@@ -170,9 +170,13 @@ test('organization owner can review and revoke a pending invite from the account
 
   const activeInvite = page.locator('.portal-invite-row').filter({ hasText: guestEmail });
   await expect(activeInvite).toContainText('Редактор');
+  const audit = page.getByRole('region', { name: 'Недавние действия' });
+  await expect(audit).toContainText('создал приглашение');
+  await expect(audit).toContainText(guestEmail);
   page.once('dialog', (dialog) => dialog.accept());
   await activeInvite.getByRole('button', { name: 'Отозвать' }).click();
-  await expect(page.getByRole('status')).toContainText('Приглашение отозвано');
+  await expect(page.locator('.portal-feedback')).toContainText('Приглашение отозвано');
+  await expect(audit).toContainText('отозвал приглашение');
   await expect(activeInvite).toHaveCount(0);
   const response = await page.request.post('/api/organizations/invites/accept', { data: { token: inviteToken } });
   expect(response.status()).toBe(404);

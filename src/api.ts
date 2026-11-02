@@ -18,6 +18,7 @@ export interface SpaceSummary {
 export interface OrganizationSummary { id: string; name: string; role: 'owner' | 'admin' | 'editor' | 'viewer' }
 export interface OrganizationMember { id: string; email: string; name: string; role: 'owner' | 'admin' | 'editor' | 'viewer' }
 export interface OrganizationInvite { id: string; email: string; role: 'admin' | 'editor' | 'viewer'; expiresAt: number; createdAt: number }
+export interface OrganizationAuditEvent { id: number; actor: string; action: string; target: string; createdAt: number }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   if (offline)
@@ -109,6 +110,7 @@ export const api = {
   createSpace: (title: string, organizationId?: string) => request<Project>('/api/spaces', { method: 'POST', body: JSON.stringify({ title, organizationId }) }),
   teamMembers: (organizationId: string) => request<{ members: OrganizationMember[] }>(`/api/organizations/${encodeURIComponent(organizationId)}/members`),
   teamInvites: (organizationId: string) => request<{ invites: OrganizationInvite[] }>(`/api/organizations/${encodeURIComponent(organizationId)}/invites`),
+  teamAudit: (organizationId: string, beforeId?: number) => request<{ events: OrganizationAuditEvent[]; nextBeforeId: number | null }>(`/api/organizations/${encodeURIComponent(organizationId)}/audit${beforeId ? `?beforeId=${beforeId}` : ''}`),
   revokeInvite: (organizationId: string, inviteId: string) => request<void>(`/api/organizations/${encodeURIComponent(organizationId)}/invites/${encodeURIComponent(inviteId)}`, { method: 'DELETE' }),
   inviteMember: (organizationId: string, email: string, role: string) => request<{ id: string; token: string; email: string; role: string; expiresAt: number }>('/api/organizations/invites', { method: 'POST', body: JSON.stringify({ organizationId, email, role }) }),
   acceptInvite: (token: string) => request<{ organization: OrganizationSummary }>('/api/organizations/invites/accept', { method: 'POST', body: JSON.stringify({ token }) }),
