@@ -98,6 +98,8 @@ def cleanup_media(database: Path, media_dir: Path, *, older_than_days: int = 30,
                 candidates.append((path, []))
 
         size_bytes = sum(path.stat().st_size for path, _ in candidates)
+        report = [{"name": path.name, "indexedAssets": len(asset_ids), "bytes": path.stat().st_size}
+                  for path, asset_ids in candidates]
         if apply:
             for _, asset_ids in candidates:
                 if asset_ids:
@@ -113,7 +115,7 @@ def cleanup_media(database: Path, media_dir: Path, *, older_than_days: int = 30,
         else:
             connection.rollback()
         return {"files": len(candidates), "assets": sum(len(ids) for _, ids in candidates),
-                "bytes": size_bytes, "applied": int(apply)}
+                "bytes": size_bytes, "applied": int(apply), "candidates": report}
     except Exception:
         connection.rollback()
         raise
@@ -138,6 +140,9 @@ def main() -> int:
         parser.exit(1, f"Media cleanup stopped: {error}\n")
     print("Cleanup applied." if result["applied"] else "Dry run only; no files changed.")
     print(f"Candidates: {result['files']} files ({result['assets']} indexed assets), {result['bytes']} bytes.")
+    for candidate in result["candidates"]:
+        kind = "indexed asset" if candidate["indexedAssets"] else "unindexed file"
+        print(f"- {candidate['name']} · {candidate['bytes']} bytes · {kind}")
     if result["files"] and not result["applied"]:
         print("Review the database and backup, then rerun with --apply to remove these files.")
     return 0

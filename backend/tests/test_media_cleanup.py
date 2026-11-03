@@ -51,7 +51,13 @@ def test_cleanup_dry_run_keeps_files_and_reports_only_old_unreferenced_media(tmp
 
     result = cleanup_media(database, media)
 
-    assert result == {"files": 2, "assets": 1, "bytes": 32, "applied": 0}
+    assert result == {
+        "files": 2, "assets": 1, "bytes": 32, "applied": 0,
+        "candidates": [
+            {"name": f"{orphan}.jpg", "indexedAssets": 1, "bytes": 23},
+            {"name": unindexed.name, "indexedAssets": 0, "bytes": 9},
+        ],
+    }
     assert (media / f"{referenced}.jpg").is_file()
     assert (media / f"{orphan}.jpg").is_file()
     assert (media / f"{recent}.jpg").is_file()
@@ -70,7 +76,10 @@ def test_apply_removes_only_expired_unreferenced_assets_and_files(tmp_path):
 
     result = cleanup_media(database, media, older_than_days=30, apply=True)
 
-    assert result == {"files": 1, "assets": 1, "bytes": 8, "applied": 1}
+    assert result == {
+        "files": 1, "assets": 1, "bytes": 8, "applied": 1,
+        "candidates": [{"name": f"{'b' * 32}.jpg", "indexedAssets": 1, "bytes": 8}],
+    }
     with sqlite3.connect(database) as connection:
         rows = {row[0] for row in connection.execute("SELECT id FROM assets")}
     assert rows == {referenced, "c" * 32}
